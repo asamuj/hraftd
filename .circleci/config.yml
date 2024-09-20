@@ -1,9 +1,9 @@
 version: 2
 jobs:
   build:
-    working_directory: ~/hraftd/src/github.com/otoolep/hraftd
+    working_directory: ~/hraftd/src/github.com/asamuj/hraftd
     docker:
-      - image: cimg/go:1.22.0
+      - image: cimg/go:1.23.0
     resource_class: large
 
     steps:

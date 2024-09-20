@@ -2,8 +2,8 @@ hraftd
 ======
 [![Circle CI](https://circleci.com/gh/otoolep/hraftd/tree/master.svg?style=svg)](https://circleci.com/gh/otoolep/hraftd/tree/master)
 [![AppVeyor](https://ci.appveyor.com/api/projects/status/github/otoolep/hraftd?branch=master&svg=true)](https://ci.appveyor.com/project/otoolep/hraftd)
-[![Go Reference](https://pkg.go.dev/badge/github.com/otoolep/hraftd.svg)](https://pkg.go.dev/github.com/otoolep/hraftd)
-[![Go Report Card](https://goreportcard.com/badge/github.com/otoolep/hraftd)](https://goreportcard.com/report/github.com/otoolep/hraftd)
+[![Go Reference](https://pkg.go.dev/badge/github.com/asamuj/hraftd.svg)](https://pkg.go.dev/github.com/asamuj/hraftd)
+[![Go Report Card](https://goreportcard.com/badge/github.com/asamuj/hraftd)](https://goreportcard.com/report/github.com/asamuj/hraftd)
 
 _For background on this project check out this [blog post](http://www.philipotoole.com/building-a-distributed-key-value-store-using-raft/)._
 
@@ -52,7 +52,7 @@ curl -XGET localhost:11000/key/user1
 ```
 
 ### Bring up a cluster
-_A walkthrough of setting up a more realistic cluster is [here](https://github.com/otoolep/hraftd/blob/master/CLUSTERING.md)._
+_A walkthrough of setting up a more realistic cluster is [here](https://github.com/asamuj/hraftd/blob/master/CLUSTERING.md)._
 
 Let's bring up 2 more nodes, so we have a 3-node cluster. That way we can tolerate the failure of 1 node:
 ```bash
