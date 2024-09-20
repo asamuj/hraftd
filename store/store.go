@@ -48,10 +48,13 @@ type Store struct {
 }
 
 // New returns a new Store.
-func New(inmem bool) *Store {
+func New(inmem bool, raftDir, raftAddr string) *Store {
 	return &Store{
-		m:      make(map[string]string),
-		inmem:  inmem,
+		m:        make(map[string]string),
+		inmem:    inmem,
+		RaftDir:  raftDir,
+		RaftBind: raftAddr,
+
 		logger: log.New(os.Stderr, "[store] ", log.LstdFlags),
 	}
 }
@@ -63,12 +66,18 @@ func (s *Store) Open(enableSingle bool, localID string) error {
 	// Setup Raft configuration.
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(localID)
+	config.LogLevel = "INFO"
+
+	if err := raft.ValidateConfig(config); err != nil {
+		return err
+	}
 
 	// Setup Raft communication.
 	addr, err := net.ResolveTCPAddr("tcp", s.RaftBind)
 	if err != nil {
 		return err
 	}
+
 	transport, err := raft.NewTCPTransport(s.RaftBind, addr, 3, 10*time.Second, os.Stderr)
 	if err != nil {
 		return err

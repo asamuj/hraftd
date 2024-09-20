@@ -3,78 +3,92 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 
+	"github.com/pkg/errors"
+	cli "github.com/urfave/cli/v2"
+
 	httpd "github.com/asamuj/hraftd/http"
 	"github.com/asamuj/hraftd/store"
 )
 
-// Command line defaults
-const (
-	DefaultHTTPAddr = "localhost:11000"
-	DefaultRaftAddr = "localhost:12000"
-)
+func main() {
+	app := cli.App{
+		Name:  "hraftd",
+		Usage: "A simple distributed key-value store using Raft",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "inmem",
+				Usage: "Use in-memory storage for Raft",
+			},
+			&cli.StringFlag{
+				Name:  "haddr",
+				Value: "127.0.0.1:11000",
+				Usage: "Set the HTTP bind address",
+			},
+			&cli.StringFlag{
+				Name:  "raddr",
+				Value: "127.0.0.1:12000",
+				Usage: "Set Raft bind address",
+			},
+			&cli.StringFlag{
+				Name:  "join",
+				Usage: "Set join address, if any",
+			},
+			&cli.StringFlag{
+				Name:  "id",
+				Usage: "Node ID. If not set, same as Raft bind address",
+			},
+			&cli.StringFlag{
+				Name:  "path",
+				Usage: "Raft storage path",
+			},
+		},
+		Action: action,
+	}
 
-// Command line parameters
-var inmem bool
-var httpAddr string
-var raftAddr string
-var joinAddr string
-var nodeID string
-
-func init() {
-	flag.BoolVar(&inmem, "inmem", false, "Use in-memory storage for Raft")
-	flag.StringVar(&httpAddr, "haddr", DefaultHTTPAddr, "Set the HTTP bind address")
-	flag.StringVar(&raftAddr, "raddr", DefaultRaftAddr, "Set Raft bind address")
-	flag.StringVar(&joinAddr, "join", "", "Set join address, if any")
-	flag.StringVar(&nodeID, "id", "", "Node ID. If not set, same as Raft bind address")
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] <raft-data-path> \n", os.Args[0])
-		flag.PrintDefaults()
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
 	}
 }
 
-func main() {
-	flag.Parse()
-	if flag.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "No Raft storage directory specified\n")
-		os.Exit(1)
-	}
-
+func action(c *cli.Context) error {
+	raftAddr := c.String("raddr")
+	httpAddr := c.String("haddr")
+	nodeID := c.String("id")
 	if nodeID == "" {
 		nodeID = raftAddr
 	}
 
 	// Ensure Raft storage exists.
-	raftDir := flag.Arg(0)
+	raftDir := c.String("path")
 	if raftDir == "" {
-		log.Fatalln("No Raft storage directory specified")
-	}
-	if err := os.MkdirAll(raftDir, 0700); err != nil {
-		log.Fatalf("failed to create path for Raft storage: %s", err.Error())
+		return errors.New("No Raft storage directory specified")
 	}
 
-	s := store.New(inmem)
-	s.RaftDir = raftDir
-	s.RaftBind = raftAddr
-	if err := s.Open(joinAddr == "", nodeID); err != nil {
-		log.Fatalf("failed to open store: %s", err.Error())
+	if err := os.MkdirAll(raftDir, 0700); err != nil {
+		return errors.Wrap(err, "failed to create path for Raft storage")
+	}
+
+	s := store.New(c.Bool("inmem"), raftDir, raftAddr)
+
+	if err := s.Open(c.String("join") == "", nodeID); err != nil {
+		return errors.Wrap(err, "failed to open store")
 	}
 
 	h := httpd.New(httpAddr, s)
 	if err := h.Start(); err != nil {
-		log.Fatalf("failed to start HTTP service: %s", err.Error())
+		return errors.Wrap(err, "failed to start HTTP service")
 	}
 
 	// If join was specified, make the join request.
-	if joinAddr != "" {
+	if joinAddr := c.String("join"); joinAddr != "" {
 		if err := join(joinAddr, raftAddr, nodeID); err != nil {
-			log.Fatalf("failed to join node at %s: %s", joinAddr, err.Error())
+			return errors.Wrapf(err, "failed to join node at %s", joinAddr)
 		}
 	}
 
@@ -85,6 +99,8 @@ func main() {
 	signal.Notify(terminate, os.Interrupt)
 	<-terminate
 	log.Println("hraftd exiting")
+
+	return nil
 }
 
 func join(joinAddr, raftAddr, nodeID string) error {

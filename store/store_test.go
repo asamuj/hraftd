@@ -1,7 +1,6 @@
 package store
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -9,12 +8,10 @@ import (
 
 // Test_StoreOpen tests that the store can be opened.
 func Test_StoreOpen(t *testing.T) {
-	s := New(false)
-	tmpDir, _ := ioutil.TempDir("", "store_test")
+	tmpDir, _ := os.MkdirTemp("", "store_test")
 	defer os.RemoveAll(tmpDir)
 
-	s.RaftBind = "127.0.0.1:0"
-	s.RaftDir = tmpDir
+	s := New(false, tmpDir, "127.0.0.1:0")
 	if s == nil {
 		t.Fatalf("failed to create store")
 	}
@@ -26,16 +23,13 @@ func Test_StoreOpen(t *testing.T) {
 
 // Test_StoreOpenSingleNode tests that a command can be applied to the log
 func Test_StoreOpenSingleNode(t *testing.T) {
-	s := New(false)
-	tmpDir, _ := ioutil.TempDir("", "store_test")
+	tmpDir, _ := os.MkdirTemp("", "store_test")
 	defer os.RemoveAll(tmpDir)
 
-	s.RaftBind = "127.0.0.1:0"
-	s.RaftDir = tmpDir
+	s := New(false, tmpDir, "127.0.0.1:0")
 	if s == nil {
 		t.Fatalf("failed to create store")
 	}
-
 	if err := s.Open(true, "node0"); err != nil {
 		t.Fatalf("failed to open store: %s", err)
 	}
@@ -75,12 +69,10 @@ func Test_StoreOpenSingleNode(t *testing.T) {
 // Test_StoreInMemOpenSingleNode tests that a command can be applied to the log
 // stored in RAM.
 func Test_StoreInMemOpenSingleNode(t *testing.T) {
-	s := New(true)
-	tmpDir, _ := ioutil.TempDir("", "store_test")
+	tmpDir, _ := os.MkdirTemp("", "store_test")
 	defer os.RemoveAll(tmpDir)
 
-	s.RaftBind = "127.0.0.1:0"
-	s.RaftDir = tmpDir
+	s := New(true, tmpDir, "127.0.0.1:0")
 	if s == nil {
 		t.Fatalf("failed to create store")
 	}
