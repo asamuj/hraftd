@@ -14,7 +14,7 @@ import (
 // Test_NewServer tests that a server can perform all basic operations.
 func Test_NewServer(t *testing.T) {
 	store := newTestStore()
-	s := &testServer{New(":0", store)}
+	s := &testServer{New(":1001", store)}
 	if err := s.Start(); err != nil {
 		t.Fatalf("failed to start HTTP service: %s", err)
 	}
@@ -50,7 +50,7 @@ type testServer struct {
 }
 
 func (t *testServer) URL() string {
-	port := strings.TrimPrefix(t.Addr().String(), "[::]:")
+	port := strings.TrimPrefix(t.addr, ":")
 	return fmt.Sprintf("http://127.0.0.1:%s", port)
 }
 

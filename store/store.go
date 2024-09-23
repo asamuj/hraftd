@@ -42,7 +42,7 @@ type Store struct {
 	mu sync.Mutex
 	m  map[string]string // The key-value store for the system.
 
-	raft *raft.Raft // The consensus mechanism
+	Raft *raft.Raft // The consensus mechanism
 
 	logger *log.Logger
 }
@@ -62,7 +62,7 @@ func New(inmem bool, raftDir, raftAddr string) *Store {
 // Open opens the store. If enableSingle is set, and there are no existing peers,
 // then this node becomes the first node, and therefore leader, of the cluster.
 // localID should be the server identifier for this node.
-func (s *Store) Open(enableSingle bool, localID string) error {
+func (s *Store) Open(localID string) error {
 	// Setup Raft configuration.
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(localID)
@@ -111,19 +111,16 @@ func (s *Store) Open(enableSingle bool, localID string) error {
 	if err != nil {
 		return fmt.Errorf("new raft: %s", err)
 	}
-	s.raft = ra
+	s.Raft = ra
 
-	if enableSingle {
-		configuration := raft.Configuration{
-			Servers: []raft.Server{
-				{
-					ID:      config.LocalID,
-					Address: transport.LocalAddr(),
-				},
+	ra.BootstrapCluster(raft.Configuration{
+		Servers: []raft.Server{
+			{
+				ID:      config.LocalID,
+				Address: transport.LocalAddr(),
 			},
-		}
-		ra.BootstrapCluster(configuration)
-	}
+		},
+	})
 
 	return nil
 }
@@ -137,7 +134,7 @@ func (s *Store) Get(key string) (string, error) {
 
 // Set sets the value for the given key.
 func (s *Store) Set(key, value string) error {
-	if s.raft.State() != raft.Leader {
+	if s.Raft.State() != raft.Leader {
 		return fmt.Errorf("not leader")
 	}
 
@@ -151,13 +148,13 @@ func (s *Store) Set(key, value string) error {
 		return err
 	}
 
-	f := s.raft.Apply(b, raftTimeout)
+	f := s.Raft.Apply(b, raftTimeout)
 	return f.Error()
 }
 
 // Delete deletes the given key.
 func (s *Store) Delete(key string) error {
-	if s.raft.State() != raft.Leader {
+	if s.Raft.State() != raft.Leader {
 		return fmt.Errorf("not leader")
 	}
 
@@ -170,7 +167,7 @@ func (s *Store) Delete(key string) error {
 		return err
 	}
 
-	f := s.raft.Apply(b, raftTimeout)
+	f := s.Raft.Apply(b, raftTimeout)
 	return f.Error()
 }
 
@@ -179,7 +176,7 @@ func (s *Store) Delete(key string) error {
 func (s *Store) Join(nodeID, addr string) error {
 	s.logger.Printf("received join request for remote node %s at %s", nodeID, addr)
 
-	configFuture := s.raft.GetConfiguration()
+	configFuture := s.Raft.GetConfiguration()
 	if err := configFuture.Error(); err != nil {
 		s.logger.Printf("failed to get raft configuration: %v", err)
 		return err
@@ -196,14 +193,14 @@ func (s *Store) Join(nodeID, addr string) error {
 				return nil
 			}
 
-			future := s.raft.RemoveServer(srv.ID, 0, 0)
+			future := s.Raft.RemoveServer(srv.ID, 0, 0)
 			if err := future.Error(); err != nil {
 				return fmt.Errorf("error removing existing node %s at %s: %s", nodeID, addr, err)
 			}
 		}
 	}
 
-	f := s.raft.AddVoter(raft.ServerID(nodeID), raft.ServerAddress(addr), 0, 0)
+	f := s.Raft.AddVoter(raft.ServerID(nodeID), raft.ServerAddress(addr), 0, 0)
 	if f.Error() != nil {
 		return f.Error()
 	}

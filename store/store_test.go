@@ -16,7 +16,7 @@ func Test_StoreOpen(t *testing.T) {
 		t.Fatalf("failed to create store")
 	}
 
-	if err := s.Open(false, "node0"); err != nil {
+	if err := s.Open("node0"); err != nil {
 		t.Fatalf("failed to open store: %s", err)
 	}
 }
@@ -30,7 +30,7 @@ func Test_StoreOpenSingleNode(t *testing.T) {
 	if s == nil {
 		t.Fatalf("failed to create store")
 	}
-	if err := s.Open(true, "node0"); err != nil {
+	if err := s.Open("node0"); err != nil {
 		t.Fatalf("failed to open store: %s", err)
 	}
 
@@ -77,7 +77,7 @@ func Test_StoreInMemOpenSingleNode(t *testing.T) {
 		t.Fatalf("failed to create store")
 	}
 
-	if err := s.Open(true, "node0"); err != nil {
+	if err := s.Open("node0"); err != nil {
 		t.Fatalf("failed to open store: %s", err)
 	}
 

@@ -3,66 +3,59 @@ package discover_test
 import (
 	"context"
 	"fmt"
-	"net"
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/asamuj/hraftd/discover"
+	"github.com/stretchr/testify/require"
 )
 
-func TestXxx(t *testing.T) {
-	d := discover.New(context.Background(), 5, "127.0.0.1:8080")
-
-	go d.Run()
-
-	d1 := discover.New(context.Background(), 5, "127.0.0.1:8080")
-
-	d1.Run()
-
-	select {}
+type notifee struct {
+	nodes chan discover.RegisterInfo
 }
 
-var mdnsWildcardAddrIPv4 = &net.UDPAddr{
-	IP:   net.ParseIP("224.0.0.251"),
-	Port: 5353,
-}
-
-func TestListen(t *testing.T) {
-	conn, err := net.ListenUDP("udp4", mdnsWildcardAddrIPv4)
-	if err != nil {
-		fmt.Println("Error setting up UDP listener:", err)
-		panic(err)
+func (n *notifee) HandleNodeFound(id string, addr string) {
+	registerInfo := discover.RegisterInfo{
+		ID:   id,
+		Addr: addr,
 	}
-	defer conn.Close()
+	n.nodes <- registerInfo
+}
 
-	println("Listening on", conn.LocalAddr().String())
-	buf := make([]byte, 1024)
+func TestMdns(t *testing.T) {
+	n := &notifee{
+		nodes: make(chan discover.RegisterInfo),
+	}
 
-	for {
-		n, remoteAddr, err := conn.ReadFromUDP(buf)
+	s, err := discover.NewService(context.Background(), "0", "xlfs.tcp", "127.0.0.1:9999", n)
+	if err != nil {
+		t.Fatalf("failed to create service: %s", err)
+	}
+
+	s.Start()
+
+	count := 3
+	listenAddresses := make([]string, count)
+	for i := 0; i < count; i++ {
+		port := 10000 + i
+		listenAddresses[i] = fmt.Sprintf("%s:%d", discover.GetLocalIP(), port)
+		s, err := discover.NewService(context.Background(), strconv.Itoa(i+1), "xlfs.tcp", listenAddresses[i], &notifee{})
 		if err != nil {
-			fmt.Println("Error reading from UDP:", err)
-			panic(err)
+			t.Fatalf("failed to create service: %s", err)
 		}
 
-		if string(buf[:n]) == "hello" {
-			fmt.Println("Received broadcast message from", remoteAddr)
+		s.Start()
+	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(count)
+	go func() {
+		for node := range n.nodes {
+			wg.Done()
+
+			require.Contains(t, listenAddresses, node.Addr)
 		}
-
-		fmt.Printf("Discovered node from %s: %d\n", remoteAddr, len(buf[:n]))
-	}
-}
-
-func TestBroadcast(t *testing.T) {
-	conn, err := net.DialUDP("udp4", nil, mdnsWildcardAddrIPv4)
-	if err != nil {
-		fmt.Println("Error setting up UDP connection:", err)
-		panic(err)
-	}
-	defer conn.Close()
-
-	fmt.Println("send broadcast message")
-	_, err = conn.Write([]byte("hello"))
-	if err != nil {
-		panic(err)
-	}
+	}()
+	wg.Wait()
 }
