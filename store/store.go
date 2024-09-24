@@ -62,7 +62,7 @@ func New(inmem bool, raftDir, raftAddr string) *Store {
 // Open opens the store. If enableSingle is set, and there are no existing peers,
 // then this node becomes the first node, and therefore leader, of the cluster.
 // localID should be the server identifier for this node.
-func (s *Store) Open(localID string) error {
+func (s *Store) Open(bootstrap bool, localID string) error {
 	// Setup Raft configuration.
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(localID)
@@ -113,14 +113,16 @@ func (s *Store) Open(localID string) error {
 	}
 	s.Raft = ra
 
-	ra.BootstrapCluster(raft.Configuration{
-		Servers: []raft.Server{
-			{
-				ID:      config.LocalID,
-				Address: transport.LocalAddr(),
+	if bootstrap {
+		ra.BootstrapCluster(raft.Configuration{
+			Servers: []raft.Server{
+				{
+					ID:      config.LocalID,
+					Address: transport.LocalAddr(),
+				},
 			},
-		},
-	})
+		})
+	}
 
 	return nil
 }
@@ -189,7 +191,6 @@ func (s *Store) Join(nodeID, addr string) error {
 			// However if *both* the ID and the address are the same, then nothing -- not even
 			// a join operation -- is needed.
 			if srv.Address == raft.ServerAddress(addr) && srv.ID == raft.ServerID(nodeID) {
-				s.logger.Printf("node %s at %s already member of cluster, ignoring join request", nodeID, addr)
 				return nil
 			}
 

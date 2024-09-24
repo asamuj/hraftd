@@ -6,7 +6,6 @@ toolchain go1.23.0
 
 require (
 	github.com/gin-gonic/gin v1.10.0
-	github.com/google/uuid v1.6.0
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/hashicorp/raft v1.7.0
 	github.com/hashicorp/raft-boltdb/v2 v2.3.0
@@ -65,3 +64,5 @@ require (
 	go.etcd.io/bbolt v1.3.10 // indirect
 	golang.org/x/sys v0.25.0 // indirect
 )
+
+replace github.com/hashicorp/raft => ../raft

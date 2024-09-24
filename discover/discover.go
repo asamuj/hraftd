@@ -8,12 +8,13 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/grandcat/zeroconf"
 )
 
 type Notifee interface {
-	HandleNodeFound(string, string)
+	HandleNodeFound(*RegisterInfo)
 }
 
 const (
@@ -23,8 +24,9 @@ const (
 )
 
 type RegisterInfo struct {
-	ID   string `json:"id"`
-	Addr string `json:"addr"`
+	ID       string `json:"id"`
+	RaftAddr string `json:"raft_addr"`
+	HttpAddr string `json:"http_addr"`
 }
 
 type Service struct {
@@ -35,17 +37,19 @@ type Service struct {
 	registerInfo string
 	server       *zeroconf.Server
 	notifee      Notifee
+	resolverWG   sync.WaitGroup
 }
 
 // NewService creates a new service.
-func NewService(ctx context.Context, instance, serviceName, listenAddress string, notifee Notifee) (*Service, error) {
+func NewService(ctx context.Context, instance, serviceName, raftAddr, httpAddr string, notifee Notifee) (*Service, error) {
 	if serviceName == "" {
 		serviceName = ServiceName
 	}
 
 	ri := &RegisterInfo{
-		ID:   instance,
-		Addr: listenAddress,
+		ID:       instance,
+		RaftAddr: raftAddr,
+		HttpAddr: httpAddr,
 	}
 
 	registerInfoBytes, err := json.Marshal(ri)
@@ -75,7 +79,8 @@ func (s *Service) startServer() error {
 	return nil
 }
 
-func (s *Service) startBrowser() error {
+func (s *Service) startResolver() error {
+	s.resolverWG.Add(2)
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
 		return err
@@ -83,8 +88,8 @@ func (s *Service) startBrowser() error {
 
 	entries := make(chan *zeroconf.ServiceEntry)
 	go func() {
+		defer s.resolverWG.Done()
 		for entry := range entries {
-			log.Printf("local instance: %s, remote instance: %s", s.instance, entry.Instance)
 			if entry.Instance == s.instance {
 				continue
 			}
@@ -98,13 +103,12 @@ func (s *Service) startBrowser() error {
 						log.Fatalf("Failed to unquote registerInfo: %s", err)
 					}
 
-					ri := RegisterInfo{}
-					if err := json.Unmarshal([]byte(unescapedData), &ri); err != nil {
+					ri := &RegisterInfo{}
+					if err := json.Unmarshal([]byte(unescapedData), ri); err != nil {
 						log.Fatalf("Failed to unmarshal registerInfo: %s", err)
 					}
 
-					log.Printf("Found node %s at %s\n", ri.ID, ri.Addr)
-					s.notifee.HandleNodeFound(ri.ID, ri.Addr)
+					s.notifee.HandleNodeFound(ri)
 				}
 			}
 
@@ -112,30 +116,34 @@ func (s *Service) startBrowser() error {
 
 	}()
 
-	if err := resolver.Browse(s.ctx, s.serviceName, mdnsDomain, entries); err != nil {
+	go func() {
+		defer s.resolverWG.Done()
+		if err := resolver.Browse(s.ctx, s.serviceName, mdnsDomain, entries); err != nil {
+			log.Fatalf("Failed to browse: %s", err)
+		}
+	}()
+
+	return nil
+}
+
+// Start starts the service.
+func (s *Service) Start() error {
+	if err := s.startServer(); err != nil {
+		return err
+	}
+
+	if err := s.startResolver(); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// Start starts the service.
-func (s *Service) Start() {
-	if err := s.startServer(); err != nil {
-		log.Fatalf("Failed to start server: %s", err)
-	}
-
-	go func() {
-		if err := s.startBrowser(); err != nil {
-			log.Fatalf("Failed to browse: %s", err)
-		}
-	}()
-}
-
 // Stop stops the service.
 func (s *Service) Stop() {
 	s.cancel()
 	s.server.Shutdown()
+	s.resolverWG.Wait()
 }
 
 // GetLocalIP returns the non loopback local IP of the host
